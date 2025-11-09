@@ -11,7 +11,7 @@
     <hr>
     
     <h2>Create New Lab</h2>
-    <form id="lab_form" action="/api/create_lab" method="POST" onsubmit="return prepareSubmit()">
+    <form id="lab_form" action="/api/create_lab" method="POST" accept-charset="UTF-8" onsubmit="return prepareSubmit()">
         <p>
             <label>Lab Name:</label><br>
             <input type="text" name="lab_name" required>
@@ -133,7 +133,11 @@
                 <div id="param_config_${paramCounter}">
                     <p>
                         <label>Manual Values (comma-separated):</label><br>
-                        <input type="text" class="manual_values_${testId}" placeholder="e.g., 1, 2, 3, 4, 5">
+                        <input type="text" class="config_value" placeholder="e.g., 1, 2, 3, 4, 5">
+                        <br><small>Numbers: 1, 2, 3</small>
+                        <br><small>Lists: [1,2,3], [4,5,6]</small>
+                        <br><small>Nested: [[1,2],[3,4]]</small>
+                        <br><small>Strings: "hello", "world"</small>
                     </p>
                 </div>
                 
@@ -162,7 +166,10 @@
                     <p>
                         <label>Manual Values (comma-separated):</label><br>
                         <input type="text" class="config_value" placeholder="e.g., 1, 2, 3, 4, 5">
-                        <br><small>For lists/arrays, use Python syntax: [1,2,3], [4,5,6], [7,8,9]</small>
+                        <br><small>Numbers: 1, 2, 3</small>
+                        <br><small>Lists: [1,2,3], [4,5,6]</small>
+                        <br><small>Nested: [[1,2],[3,4]]</small>
+                        <br><small>Strings: "hello", "world"</small>
                     </p>
                 `;
             } else if (type === 'num') {
@@ -262,13 +269,18 @@
                 return false;
             }
             
+            let hasError = false;
+            
             testDivs.forEach((testDiv, testIdx) => {
+                if (hasError) return; // Skip if already have error
+                
                 const testId = testDiv.id.split('_')[1];
                 const methodName = testDiv.querySelector('.method_name').value;
                 const trackMutation = testDiv.querySelector('.track_mutation').value;
                 
                 if (!methodName) {
                     alert('Please enter a method name for all tests!');
+                    hasError = true;
                     return;
                 }
                 
@@ -280,6 +292,7 @@
                 
                 if (paramNames.length === 0) {
                     alert('Please add at least one parameter for method: ' + methodName);
+                    hasError = true;
                     return;
                 }
                 
@@ -288,32 +301,51 @@
                     const testType = testTypes[paramIdx].value;
                     const paramDiv = nameInput.closest('fieldset');
                     
+                    if (!paramName) {
+                        alert('Please enter a name for parameter ' + (paramIdx + 1));
+                        hasError = true;
+                        return;
+                    }
+                    
+                    // Initialize param array if doesn't exist
+                    if (!params[paramName]) {
+                        params[paramName] = [];
+                    }
+                    
                     if (testType === 'manual') {
-                        const manualValue = paramDiv.querySelector('.config_value').value;
-                        const values = manualValue.split(',').map(v => {
-                            const trimmed = v.trim();
-                            
-                            // Check if it's a list/array syntax like [1,2,3]
-                            if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
-                                try {
-                                    return JSON.parse(trimmed);
-                                } catch (e) {
-                                    // If JSON parse fails, return as string
-                                    return trimmed;
-                                }
+                        const configValueInput = paramDiv.querySelector('.config_value');
+                        if (!configValueInput) {
+                            alert('Configuration not loaded for parameter: ' + paramName + '. Please wait for the form to load.');
+                            hasError = true;
+                            return;
+                        }
+                        const manualValue = configValueInput.value.trim();
+                        
+                        if (!manualValue) {
+                            alert('Please enter values for parameter: ' + paramName);
+                            hasError = true;
+                            return;
+                        }
+                        
+                        let values;
+                        
+                        try {
+                            // Try to parse as-is first
+                            values = JSON.parse(manualValue);
+                        } catch (e1) {
+                            // If that fails, try wrapping in brackets
+                            try {
+                                values = JSON.parse('[' + manualValue + ']');
+                            } catch (e2) {
+                                alert('Invalid input format for parameter: ' + paramName + '\nInput: ' + manualValue + '\nError: ' + e2.message);
+                                console.error('Parse error:', e2, 'Input:', manualValue);
+                                hasError = true;
+                                return;
                             }
-                            
-                            // Try to parse as number
-                            const num = Number(trimmed);
-                            if (!isNaN(num)) return num;
-                            // Try to parse as boolean
-                            if (trimmed === 'true') return true;
-                            if (trimmed === 'false') return false;
-                            if (trimmed === 'null') return null;
-                            // Return as string
-                            return trimmed;
-                        });
-                        params[paramName] = values;
+                        }
+                        
+                        // Add manual values to the param array
+                        params[paramName].push(...values);
                     } else if (testType === 'num') {
                         const config = {
                             type: 'num',
@@ -325,7 +357,7 @@
                         if (decimalInput && decimalInput.value) {
                             config.decimal = Number(decimalInput.value);
                         }
-                        params[paramName] = [config];
+                        params[paramName].push(config);
                     } else if (testType === 'string') {
                         const config = {
                             type: 'string',
@@ -337,7 +369,7 @@
                         if (caseVal) {
                             config.case = caseVal;
                         }
-                        params[paramName] = [config];
+                        params[paramName].push(config);
                     } else if (testType === 'bool_or_none') {
                         const config = {
                             type: 'bool_or_none',
@@ -346,7 +378,7 @@
                             include_none: paramDiv.querySelector('.config_include_none').checked,
                             total_tests: Number(paramDiv.querySelector('.config_total').value)
                         };
-                        params[paramName] = [config];
+                        params[paramName].push(config);
                     } else if (testType === 'array') {
                         const elemType = paramDiv.querySelector('.config_element_type').value;
                         const arrayLength = Number(paramDiv.querySelector('.config_array_length').value);
@@ -378,7 +410,7 @@
                             elements: elements,
                             total_tests: Number(paramDiv.querySelector('.config_total').value)
                         };
-                        params[paramName] = [config];
+                        params[paramName].push(config);
                     }
                 });
                 
@@ -388,6 +420,10 @@
                     track_mutation: trackMutation.split(',').map(s => s.trim()).filter(s => s)
                 });
             });
+            
+            if (hasError) {
+                return false;
+            }
             
             if (tests.length === 0) {
                 alert('No valid tests configured!');
