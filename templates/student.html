@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Autograder - Student</title>
+</head>
+<body>
+    <h1>Autograder - Student Interface</h1>
+    
+    <p><a href="/teacher">Teacher</a> | <a href="/student">Student</a></p>
+    
+    <hr>
+    
+    <h2>Submit Code</h2>
+    <form action="/api/submit" method="POST">
+        <p>
+            <label>Lab Name:</label><br>
+            <input type="text" name="lab_name" id="lab_name" required>
+        </p>
+        
+        <p>
+            <label>Student Name:</label><br>
+            <input type="text" name="student_name" required>
+        </p>
+        
+        <p>
+            <label>Your Code:</label><br>
+            <textarea name="student_code" rows="20" cols="80" required></textarea>
+        </p>
+        
+        <p>
+            <button type="submit">Submit</button>
+        </p>
+    </form>
+    
+    <hr>
+    
+    <h2>Check Grade</h2>
+    <form action="/api/grade" method="POST" onsubmit="return gradeSubmission(event)">
+        <p>
+            <label>Lab Name:</label><br>
+            <input type="text" name="lab_name_grade" required>
+        </p>
+        
+        <p>
+            <label>Student Name:</label><br>
+            <input type="text" name="student_name_grade" required>
+        </p>
+        
+        <p>
+            <button type="submit">Check Grade</button>
+        </p>
+    </form>
+    
+    <div id="grade_result"></div>
+    
+    <hr>
+    
+    <h2>Available Labs</h2>
+    <div id="labs">Loading...</div>
+    
+    <script>
+        fetch('/api/labs')
+            .then(r => r.json())
+            .then(data => {
+                let html = '<ul>';
+                data.labs.forEach(lab => {
+                    html += '<li>' + lab + '</li>';
+                });
+                html += '</ul>';
+                document.getElementById('labs').innerHTML = html;
+            });
+        
+        function gradeSubmission(event) {
+            event.preventDefault();
+            const form = event.target;
+            const formData = new FormData(form);
+            
+            fetch('/api/grade', {
+                method: 'POST',
+                body: new URLSearchParams(formData)
+            })
+            .then(r => r.json())
+            .then(data => {
+                let html = '<h3>Grade Results</h3>';
+                
+                if (data.error) {
+                    html += '<p><strong>Error:</strong> ' + data.error + '</p>';
+                    html += '<pre>' + data.details + '</pre>';
+                } else {
+                    html += '<p><strong>Score: ' + data.passed + ' / ' + data.total + '</strong></p>';
+                    
+                    if (data.passed === data.total) {
+                        html += '<p>All tests passed!</p>';
+                    } else {
+                        html += '<h4>Failed Tests:</h4><ul>';
+                        data.results.forEach(test => {
+                            if (!test.passed) {
+                                html += '<li>Test ' + test.test + ': ';
+                                html += 'Expected return: ' + JSON.stringify(test.expected_return) + ', ';
+                                html += 'Got: ' + JSON.stringify(test.got_return);
+                                if (Object.keys(test.expected_heap).length > 0) {
+                                    html += '<br>Expected heap: ' + JSON.stringify(test.expected_heap) + ', ';
+                                    html += 'Got: ' + JSON.stringify(test.got_heap);
+                                }
+                                html += '</li>';
+                            }
+                        });
+                        html += '</ul>';
+                    }
+                }
+                
+                document.getElementById('grade_result').innerHTML = html;
+            });
+            
+            return false;
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Autograder - Teacher</title>
+</head>
+<body>
+    <h1>Autograder - Teacher Interface</h1>
+    
+    <p><a href="/teacher">Teacher</a> | <a href="/student">Student</a></p>
+    
+    <hr>
+    
+    <h2>Create New Lab</h2>
+    <form id="lab_form" action="/api/create_lab" method="POST" onsubmit="return prepareSubmit()">
+        <p>
+            <label>Lab Name:</label><br>
+            <input type="text" name="lab_name" required>
+        </p>
+        
+        <p>
+            <label>Solution Code:</label><br>
+            <textarea name="solution_code" rows="15" cols="80" required></textarea>
+        </p>
+        
+        <h3>Test Configuration</h3>
+        
+        <div id="tests_container"></div>
+        
+        <p>
+            <button type="button" onclick="addTest()">Add Test Method</button>
+        </p>
+        
+        <hr>
+        
+        <p>
+            <button type="submit">Create Lab</button>
+        </p>
+    </form>
+    
+    <hr>
+    
+    <h2>Existing Labs</h2>
+    <div id="labs">Loading...</div>
+    
+    <script>
+        let testCounter = 0;
+        let paramCounter = 0;
+        
+        // Add first test on page load
+        window.onload = function() {
+            addTest();
+            
+            // Load existing labs
+            fetch('/api/labs')
+                .then(r => r.json())
+                .then(data => {
+                    let html = '<ul>';
+                    data.labs.forEach(lab => {
+                        html += '<li>' + lab + '</li>';
+                    });
+                    html += '</ul>';
+                    document.getElementById('labs').innerHTML = html;
+                });
+        };
+        
+        function addTest() {
+            testCounter++;
+            const container = document.getElementById('tests_container');
+            
+            const testDiv = document.createElement('fieldset');
+            testDiv.id = 'test_' + testCounter;
+            testDiv.innerHTML = `
+                <legend>Test Method ${testCounter}</legend>
+                
+                <p>
+                    <label>Method Name:</label><br>
+                    <input type="text" class="method_name" required>
+                </p>
+                
+                <div id="params_${testCounter}"></div>
+                
+                <p>
+                    <button type="button" onclick="addParameter(${testCounter})">Add Parameter</button>
+                </p>
+                
+                <p>
+                    <label>Track Mutations (parameters that get modified in-place):</label><br>
+                    <input type="text" class="track_mutation" placeholder="e.g., arr, lst">
+                </p>
+                
+                <p>
+                    <button type="button" onclick="removeTest(${testCounter})">Remove This Test</button>
+                </p>
+                <hr>
+            `;
+            
+            container.appendChild(testDiv);
+        }
+        
+        function removeTest(testId) {
+            const testDiv = document.getElementById('test_' + testId);
+            if (testDiv) {
+                testDiv.remove();
+            }
+        }
+        
+        function addParameter(testId) {
+            paramCounter++;
+            const paramsDiv = document.getElementById('params_' + testId);
+            
+            const paramDiv = document.createElement('fieldset');
+            paramDiv.id = 'param_' + paramCounter;
+            paramDiv.innerHTML = `
+                <legend>Parameter</legend>
+                
+                <p>
+                    <label>Parameter Name:</label><br>
+                    <input type="text" class="param_name_${testId}" required>
+                    <br><small>Hint: If your function expects a list/array parameter, use "Auto: Arrays" below</small>
+                </p>
+                
+                <p>
+                    <label>Test Type:</label><br>
+                    <select class="test_type_${testId}" onchange="updateParamConfig(${paramCounter}, this.value)">
+                        <option value="manual">Manual Values</option>
+                        <option value="num">Auto: Numbers</option>
+                        <option value="string">Auto: Strings</option>
+                        <option value="bool_or_none">Auto: Bool/None</option>
+                        <option value="array">Auto: Arrays</option>
+                    </select>
+                </p>
+                
+                <div id="param_config_${paramCounter}">
+                    <p>
+                        <label>Manual Values (comma-separated):</label><br>
+                        <input type="text" class="manual_values_${testId}" placeholder="e.g., 1, 2, 3, 4, 5">
+                    </p>
+                </div>
+                
+                <p>
+                    <button type="button" onclick="removeParameter(${paramCounter})">Remove Parameter</button>
+                </p>
+            `;
+            
+            paramsDiv.appendChild(paramDiv);
+        }
+        
+        function removeParameter(paramId) {
+            const paramDiv = document.getElementById('param_' + paramId);
+            if (paramDiv) {
+                paramDiv.remove();
+            }
+        }
+        
+        function updateParamConfig(paramId, type) {
+            const configDiv = document.getElementById('param_config_' + paramId);
+            
+            let html = '';
+            
+            if (type === 'manual') {
+                html = `
+                    <p>
+                        <label>Manual Values (comma-separated):</label><br>
+                        <input type="text" class="config_value" placeholder="e.g., 1, 2, 3, 4, 5">
+                        <br><small>For lists/arrays, use Python syntax: [1,2,3], [4,5,6], [7,8,9]</small>
+                    </p>
+                `;
+            } else if (type === 'num') {
+                html = `
+                    <p>
+                        <label>Lower Bound:</label><br>
+                        <input type="number" class="config_lower" value="0">
+                    </p>
+                    <p>
+                        <label>Upper Bound:</label><br>
+                        <input type="number" class="config_upper" value="100">
+                    </p>
+                    <p>
+                        <label>Decimal Places (leave empty for integers):</label><br>
+                        <input type="number" class="config_decimal" placeholder="e.g., 2">
+                    </p>
+                    <p>
+                        <label>Total Tests:</label><br>
+                        <input type="number" class="config_total" value="10">
+                    </p>
+                `;
+            } else if (type === 'string') {
+                html = `
+                    <p>
+                        <label>Minimum Length:</label><br>
+                        <input type="number" class="config_lower_len" value="3">
+                    </p>
+                    <p>
+                        <label>Maximum Length:</label><br>
+                        <input type="number" class="config_upper_len" value="10">
+                    </p>
+                    <p>
+                        <label>Case:</label><br>
+                        <select class="config_case">
+                            <option value="">No change</option>
+                            <option value="lower">Lowercase</option>
+                            <option value="upper">Uppercase</option>
+                            <option value="random">Random case</option>
+                        </select>
+                    </p>
+                    <p>
+                        <label>Total Tests:</label><br>
+                        <input type="number" class="config_total" value="10">
+                    </p>
+                `;
+            } else if (type === 'bool_or_none') {
+                html = `
+                    <p>
+                        <label><input type="checkbox" class="config_include_true" checked> Include True</label><br>
+                        <label><input type="checkbox" class="config_include_false" checked> Include False</label><br>
+                        <label><input type="checkbox" class="config_include_none" checked> Include None</label>
+                    </p>
+                    <p>
+                        <label>Total Tests:</label><br>
+                        <input type="number" class="config_total" value="10">
+                    </p>
+                `;
+            } else if (type === 'array') {
+                html = `
+                    <p>
+                        <label>Element Type:</label><br>
+                        <select class="config_element_type">
+                            <option value="num">Numbers</option>
+                            <option value="string">Strings</option>
+                            <option value="bool_or_none">Bool/None</option>
+                        </select>
+                    </p>
+                    <p>
+                        <label>Array Length:</label><br>
+                        <input type="number" class="config_array_length" value="5">
+                    </p>
+                    <p>
+                        <label>Element Lower Bound (for numbers):</label><br>
+                        <input type="number" class="config_elem_lower" value="0">
+                    </p>
+                    <p>
+                        <label>Element Upper Bound (for numbers):</label><br>
+                        <input type="number" class="config_elem_upper" value="100">
+                    </p>
+                    <p>
+                        <label>Total Tests:</label><br>
+                        <input type="number" class="config_total" value="5">
+                    </p>
+                `;
+            }
+            
+            configDiv.innerHTML = html;
+        }
+        
+        function prepareSubmit() {
+            // Collect all test configurations
+            const tests = [];
+            const testDivs = document.querySelectorAll('[id^="test_"]');
+            
+            if (testDivs.length === 0) {
+                alert('Please add at least one test method!');
+                return false;
+            }
+            
+            testDivs.forEach((testDiv, testIdx) => {
+                const testId = testDiv.id.split('_')[1];
+                const methodName = testDiv.querySelector('.method_name').value;
+                const trackMutation = testDiv.querySelector('.track_mutation').value;
+                
+                if (!methodName) {
+                    alert('Please enter a method name for all tests!');
+                    return;
+                }
+                
+                const params = {};
+                
+                // Get all parameters for this test
+                const paramNames = testDiv.querySelectorAll('.param_name_' + testId);
+                const testTypes = testDiv.querySelectorAll('.test_type_' + testId);
+                
+                if (paramNames.length === 0) {
+                    alert('Please add at least one parameter for method: ' + methodName);
+                    return;
+                }
+                
+                paramNames.forEach((nameInput, paramIdx) => {
+                    const paramName = nameInput.value;
+                    const testType = testTypes[paramIdx].value;
+                    const paramDiv = nameInput.closest('fieldset');
+                    
+                    if (testType === 'manual') {
+                        const manualValue = paramDiv.querySelector('.config_value').value;
+                        const values = manualValue.split(',').map(v => {
+                            const trimmed = v.trim();
+                            
+                            // Check if it's a list/array syntax like [1,2,3]
+                            if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+                                try {
+                                    return JSON.parse(trimmed);
+                                } catch (e) {
+                                    // If JSON parse fails, return as string
+                                    return trimmed;
+                                }
+                            }
+                            
+                            // Try to parse as number
+                            const num = Number(trimmed);
+                            if (!isNaN(num)) return num;
+                            // Try to parse as boolean
+                            if (trimmed === 'true') return true;
+                            if (trimmed === 'false') return false;
+                            if (trimmed === 'null') return null;
+                            // Return as string
+                            return trimmed;
+                        });
+                        params[paramName] = values;
+                    } else if (testType === 'num') {
+                        const config = {
+                            type: 'num',
+                            lower: Number(paramDiv.querySelector('.config_lower').value),
+                            upper: Number(paramDiv.querySelector('.config_upper').value),
+                            total_tests: Number(paramDiv.querySelector('.config_total').value)
+                        };
+                        const decimalInput = paramDiv.querySelector('.config_decimal');
+                        if (decimalInput && decimalInput.value) {
+                            config.decimal = Number(decimalInput.value);
+                        }
+                        params[paramName] = [config];
+                    } else if (testType === 'string') {
+                        const config = {
+                            type: 'string',
+                            lower_len: Number(paramDiv.querySelector('.config_lower_len').value),
+                            upper_len: Number(paramDiv.querySelector('.config_upper_len').value),
+                            total_tests: Number(paramDiv.querySelector('.config_total').value)
+                        };
+                        const caseVal = paramDiv.querySelector('.config_case').value;
+                        if (caseVal) {
+                            config.case = caseVal;
+                        }
+                        params[paramName] = [config];
+                    } else if (testType === 'bool_or_none') {
+                        const config = {
+                            type: 'bool_or_none',
+                            include_true: paramDiv.querySelector('.config_include_true').checked,
+                            include_false: paramDiv.querySelector('.config_include_false').checked,
+                            include_none: paramDiv.querySelector('.config_include_none').checked,
+                            total_tests: Number(paramDiv.querySelector('.config_total').value)
+                        };
+                        params[paramName] = [config];
+                    } else if (testType === 'array') {
+                        const elemType = paramDiv.querySelector('.config_element_type').value;
+                        const arrayLength = Number(paramDiv.querySelector('.config_array_length').value);
+                        
+                        const elements = [];
+                        for (let i = 0; i < arrayLength; i++) {
+                            if (elemType === 'num') {
+                                elements.push({
+                                    type: 'num',
+                                    lower: Number(paramDiv.querySelector('.config_elem_lower').value),
+                                    upper: Number(paramDiv.querySelector('.config_elem_upper').value)
+                                });
+                            } else if (elemType === 'string') {
+                                elements.push({
+                                    type: 'string',
+                                    lower_len: 3,
+                                    upper_len: 10,
+                                    char_range: [97, 122]
+                                });
+                            } else if (elemType === 'bool_or_none') {
+                                elements.push({
+                                    type: 'bool_or_none'
+                                });
+                            }
+                        }
+                        
+                        const config = {
+                            type: 'array',
+                            elements: elements,
+                            total_tests: Number(paramDiv.querySelector('.config_total').value)
+                        };
+                        params[paramName] = [config];
+                    }
+                });
+                
+                tests.push({
+                    method: methodName,
+                    params: params,
+                    track_mutation: trackMutation.split(',').map(s => s.trim()).filter(s => s)
+                });
+            });
+            
+            if (tests.length === 0) {
+                alert('No valid tests configured!');
+                return false;
+            }
+            
+            console.log('Tests collected:', tests);
+            
+            // Create hidden input with JSON data
+            const existingInput = document.querySelector('input[name="test_config_json"]');
+            if (existingInput) {
+                existingInput.remove();
+            }
+            
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = 'test_config_json';
+            input.value = JSON.stringify(tests);
+            document.getElementById('lab_form').appendChild(input);
+            
+            console.log('Test config JSON:', input.value);
+            
+            return true;
+        }
+    </script>
+</body>
+</html>
